@@ -1,0 +1,202 @@
+// The home-screen widget puppy's little routine: sit, scratch an ear, pant,
+// woof, spot his ball, walk over, reach for it and tap it, look happy,
+// stroll back, wag and lie down for a rest.
+//
+// The dog images are rendered from the game's own painters, centred in a
+// 104x88 unit box (the dog's 100x85 box plus a margin). Android plays the
+// routine as a flip-book (generated below); the iOS widget plays the same
+// beats on its timeline (see ios/PetWidget/PetWidget.swift).
+import 'dart:math' as math;
+
+import 'package:flutter/painting.dart';
+import 'package:dog_game/game/animations/dog_animations.dart';
+import 'package:dog_game/game/models/dog_game_state.dart';
+
+/// Dog-only images, by name (`widget_dog_<name>`).
+final dogFrames = <String, DogFrame>{
+  'idle': _at(DogPose.idle, 0.2),
+  'blink': const DogFrame(eyeOpen: 0, tailAngle: 0.1),
+  // A happy pant, tongue out: breath in, breath out.
+  'pant_1': _at(DogPose.pant, 0.0),
+  'pant_2': _at(DogPose.pant, 0.14),
+  // A good ear scratch with a hind paw.
+  'scratch_1': _at(DogPose.scratchEar, 1.0),
+  'scratch_2': _at(DogPose.scratchEar, 1.06),
+  // Head up, mouth wide: "Woof!"
+  'woof': const DogFrame(
+    headOffset: Offset(1, -1.5),
+    headTilt: -0.14,
+    mouth: DogMouth.open,
+    eyeScale: 1.05,
+    tailAngle: 0.35,
+    earTwitch: 0.1,
+  ),
+  for (var i = 0; i < 4; i++) 'walk_${i + 1}': _walk(i * math.pi / 2),
+  'tap': const DogFrame(
+    bodyLift: 1.5,
+    headOffset: Offset(2, 2),
+    raisedPaw: Offset(93, 78),
+    gaze: 1,
+    gazeY: 1,
+    mouth: DogMouth.open,
+    tailAngle: 0.3,
+  ),
+  'happy': const DogFrame(happyEyes: true, mouth: DogMouth.tongue, tailAngle: 0.35, sparkle: 0.17),
+  // Tail up, tail down: a slow wag.
+  'tail': const DogFrame(tailAngle: 0.45, gaze: -0.4),
+  'tail_down': const DogFrame(tailAngle: -0.25, gaze: -0.4),
+  // Spotting the ball, then a play bow reaching for it.
+  'look': const DogFrame(gaze: 1, gazeY: 0.6, headTilt: 0.08, tailAngle: 0.3, earTwitch: 0.15),
+  'reach': _at(DogPose.playBow, 0.3).copyWith(mouth: DogMouth.tongue),
+  // Lying down for a rest, chin on paws.
+  'rest': _at(DogPose.lieDown, 0.5),
+};
+
+DogFrame _at(DogPose pose, double t) =>
+    dogFrameFor(pose: pose, time: 1.0 + t, poseTime: t, walkPhase: 0, gaze: 0, swipe: 0);
+
+DogFrame _walk(double phase) {
+  // The walking pose without its speed lines; the flip-book shows the motion.
+  final f = dogFrameFor(pose: DogPose.walk, time: 1, poseTime: 0, walkPhase: phase, gaze: 0, swipe: 0);
+  return DogFrame(
+    breath: f.breath,
+    bodyLift: f.bodyLift,
+    headOffset: f.headOffset,
+    feet: f.feet,
+    tailAngle: f.tailAngle,
+    mouth: DogMouth.smile,
+  );
+}
+
+/// The "Woof!" bubble: none, popping in, or full size.
+enum Bubble { none, pop, full }
+
+/// One flip-book frame: which dog image, how far along the floor (0 = her
+/// spot, 1 = at the ball), which way she faces, and the woof bubble.
+typedef RoutineFrame = (String dog, double x, int facing, Bubble bubble);
+
+List<RoutineFrame> _repeat(int n, RoutineFrame f) => List.filled(n, f);
+
+List<RoutineFrame> _walkTo(double from, double to, int facing, int frames) => [
+  for (var i = 0; i < frames; i++) ('walk_${i % 4 + 1}', from + (to - from) * (i + 1) / frames, facing, Bubble.none),
+];
+
+/// The whole routine, at [flipMillis] per frame (about 16 seconds a loop).
+final routine = <RoutineFrame>[
+  ..._repeat(4, ('idle', 0, 1, Bubble.none)),
+  ('blink', 0, 1, Bubble.none),
+  ..._repeat(3, ('idle', 0, 1, Bubble.none)),
+  // A good ear scratch, then a happy pant.
+  for (final n in [1, 2, 1, 2, 1, 2]) ('scratch_$n', 0, 1, Bubble.none),
+  for (final n in [1, 2, 1, 2, 1, 2]) ('pant_$n', 0, 1, Bubble.none),
+  ..._repeat(2, ('idle', 0, 1, Bubble.none)),
+  // Woof!
+  ('woof', 0, 1, Bubble.pop),
+  ..._repeat(4, ('woof', 0, 1, Bubble.full)),
+  ..._repeat(2, ('idle', 0, 1, Bubble.full)),
+  ..._repeat(2, ('idle', 0, 1, Bubble.none)),
+  // Spot the ball, roam over, reach for it and give it a tap.
+  ..._repeat(3, ('look', 0, 1, Bubble.none)),
+  ..._walkTo(0, 1, 1, 12),
+  ..._repeat(2, ('reach', 1, 1, Bubble.none)),
+  ..._repeat(3, ('tap', 1, 1, Bubble.none)),
+  ..._repeat(4, ('happy', 1, 1, Bubble.none)),
+  // Stroll back and settle.
+  ..._walkTo(1, 0, -1, 12),
+  ('blink', 0, -1, Bubble.none),
+  for (var i = 0; i < 4; i++) (i.isEven ? 'tail' : 'tail_down', 0, 1, Bubble.none),
+  ..._repeat(6, ('rest', 0, 1, Bubble.none)),
+];
+
+const flipMillis = 250;
+
+/// Share of the puppy area's width the dog takes, how far she can roam
+/// (both in percent), and the ball's share at the right.
+const dogWeight = 62;
+const roamWeight = 24;
+const ballWeight = 14;
+
+/// The Android flip-book: one child per frame, each placing the dog with
+/// layout weights (RemoteViews can't move views at run time).
+String puppyLayoutXml() {
+  final b = StringBuffer()
+    ..writeln('<?xml version="1.0" encoding="utf-8"?>')
+    ..writeln('<!-- GENERATED by tool/widget_assets/render_widget_assets_test.dart from')
+    ..writeln('     tool/widget_assets/widget_routine.dart. Do not edit by hand.')
+    ..writeln()
+    ..writeln('     The puppy\'s routine as a flip-book the launcher plays by itself (no')
+    ..writeln('     app wake-ups; launchers pause it while the widget is off screen). Each')
+    ..writeln('     frame places the dog along the floor with layout weights. -->')
+    ..writeln('<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"')
+    ..writeln('    android:layout_width="match_parent"')
+    ..writeln('    android:layout_height="match_parent"')
+    ..writeln('    android:importantForAccessibility="noHideDescendants">')
+    ..writeln()
+    ..writeln('    <LinearLayout')
+    ..writeln('        android:layout_width="match_parent"')
+    ..writeln('        android:layout_height="match_parent"')
+    ..writeln('        android:orientation="horizontal"')
+    ..writeln('        android:weightSum="100">')
+    ..writeln(
+      '        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="${100 - ballWeight}" />',
+    )
+    ..writeln(
+      '        <ImageView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="$ballWeight" android:scaleType="fitEnd" android:paddingBottom="4dp" android:src="@drawable/widget_toy_ball" />',
+    )
+    ..writeln('    </LinearLayout>')
+    ..writeln()
+    ..writeln('    <ViewFlipper')
+    ..writeln('        android:id="@+id/puppy_flipper"')
+    ..writeln('        android:layout_width="match_parent"')
+    ..writeln('        android:layout_height="match_parent"')
+    ..writeln('        android:autoStart="true"')
+    ..writeln('        android:flipInterval="$flipMillis">');
+  for (final (i, (dog, x, facing, bubble)) in routine.indexed) {
+    final before = (x * roamWeight).round();
+    final after = 100 - dogWeight - before;
+    b
+      ..writeln(
+        '        <!-- $i: $dog${facing < 0 ? ' (facing left)' : ''}${bubble == Bubble.none ? '' : ', woof bubble'} -->',
+      )
+      ..writeln(
+        '        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:weightSum="100">',
+      )
+      ..writeln(
+        '            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="$before" />',
+      )
+      ..writeln(
+        '            <ImageView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="$dogWeight" android:scaleType="fitEnd"${facing < 0 ? ' android:scaleX="-1"' : ''} android:src="@drawable/widget_dog_$dog" />',
+      );
+    if (bubble == Bubble.none) {
+      b.writeln(
+        '            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="$after" />',
+      );
+    } else {
+      b
+        ..writeln(
+          '            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="$after">',
+        )
+        ..writeln(
+          '                <ImageView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="top|start" android:adjustViewBounds="true" android:scaleType="fitStart"${bubble == Bubble.pop ? ' android:padding="7dp"' : ''} android:src="@drawable/widget_woof" />',
+        )
+        ..writeln('            </FrameLayout>');
+    }
+    b.writeln('        </LinearLayout>');
+  }
+  b
+    ..writeln('    </ViewFlipper>')
+    ..writeln('</FrameLayout>');
+  return b.toString();
+}
+
+/// Frame indices the provider jumps to when the app shares a pose.
+String puppyFramesXml() {
+  final happy = routine.indexWhere((f) => f.$1 == 'happy');
+  return '''<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED by tool/widget_assets/render_widget_assets_test.dart. -->
+<resources>
+    <!-- First frame of the happy beat, shown right after an activity. -->
+    <integer name="widget_happy_frame">$happy</integer>
+</resources>
+''';
+}

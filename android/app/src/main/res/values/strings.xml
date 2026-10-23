@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">My Pet Dog</string>
+    <string name="widget_greeting">Come play with me!</string>
+    <string name="widget_status">Ready to play</string>
+    <string name="widget_tap">Tap to Play</string>
+    <string name="widget_tap_short">Tap to play ▸</string>
+    <string name="widget_small_label">My Pet Dog · small</string>
+    <string name="widget_medium_label">My Pet Dog · medium</string>
+    <string name="widget_large_label">My Pet Dog · large</string>
+    <string name="widget_small_description">Your puppy, one tap from play.</string>
+    <string name="widget_medium_description">Your puppy and her ball. Tap to play.</string>
+    <string name="widget_large_description">Buddy\'s cozy corner. Tap to play.</string>
+    <string name="widget_content_description_default">My Pet Dog. Come play with me! Tap to play.</string>
+    <string name="widget_content_description">My Pet Dog. %1$s Tap to play.</string>
+</resources>

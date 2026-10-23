@@ -1,0 +1,317 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:math' as math;
+import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+
+import '../animations/dog_animations.dart';
+import '../dogs/dog_needs.dart';
+import '../dogs/dog_persona.dart';
+import '../dogs/reaction.dart';
+import '../environments/activity_scripts.dart';
+import '../models/activity_definition.dart';
+import '../models/dog_game_state.dart';
+import '../models/day_phase.dart';
+import '../models/game_location.dart';
+import '../models/game_positions.dart';
+import '../models/game_timings.dart';
+import '../scripting/activity_runner.dart';
+import '../scripting/scene_state.dart';
+import '../scripting/script_step.dart';
+
+/// Owns the game clock, the selected location and the scene, and starts
+/// activities.
+///
+/// Every activity is an [ActivityScript] played by one [ActivityRunner]; the
+/// idle wander routine runs through the same runner. All animation time
+/// comes from one [Ticker] with a clamped frame step, so pausing the ticker
+/// freezes everything, including waits.
+class DogGameController extends ChangeNotifier {
+  DogGameController({
+    required TickerProvider vsync,
+    GameLocation initialLocation = GameLocation.home,
+    DogPersona persona = DogPersonas.maple,
+    bool shortLegs = false,
+    bool wanderEnabled = true,
+    this.onNeeds,
+    this.onCompleted,
+    DateTime Function() clock = DateTime.now,
+  }) : _location = ValueNotifier(initialLocation),
+       _clock = clock,
+       _dayPhase = ValueNotifier(DayPhase.at(clock())),
+       _persona = persona,
+       _wanderEnabled = wanderEnabled {
+    _scene = SceneState(locationConfig.startPosition);
+    _runner = ActivityRunner(_scene)
+      ..onPhase = _setState
+      ..onNeeds = ((deltas) => onNeeds?.call(deltas))
+      ..reactionFor = ((thingId) => thingId == null ? ReactionOutcome.fine : _persona.reactionTo(thingId))
+      ..walkSpeedScale = persona.walkSpeedScale
+      ..shortLegs = shortLegs;
+    _ticker = vsync.createTicker(_onTick)..start();
+    unawaited(_wander(_runner.session));
+  }
+
+  /// Needs changed by a script (fed, played, bathed...).
+  final void Function(Map<Need, double> deltas)? onNeeds;
+
+  /// An activity played through to the end.
+  final void Function(DogActivity activity)? onCompleted;
+
+  late final Ticker _ticker;
+  late final SceneState _scene;
+  late final ActivityRunner _runner;
+  final _state = ValueNotifier(DogGameState.idle);
+  final ValueNotifier<GameLocation> _location;
+  final _sceneOpacity = ValueNotifier<double>(1);
+  final DogPersona _persona;
+  final DateTime Function() _clock;
+  final ValueNotifier<DayPhase> _dayPhase;
+  double _sinceClockCheck = 0;
+
+  int _wanderIndex = 0;
+  bool _wanderEnabled;
+  bool _paused = false;
+  bool _disposed = false;
+  Duration _lastElapsed = Duration.zero;
+
+  DogActivity? _activity;
+  DogActivity? _lastCompleted;
+
+  ValueListenable<DogGameState> get stateListenable => _state;
+  DogGameState get state => _state.value;
+  GameMode get mode => state.mode;
+  bool get isBusy => state != DogGameState.idle;
+
+  ValueListenable<GameLocation> get locationListenable => _location;
+  GameLocation get location => _location.value;
+  LocationConfig get locationConfig => Locations.of(location);
+
+  /// The time of day, from the device clock; scenes are drawn for it.
+  ValueListenable<DayPhase> get dayPhase => _dayPhase;
+
+  /// 0..1 opacity of the scene, dipped during location changes.
+  ValueListenable<double> get sceneOpacity => _sceneOpacity;
+
+  Offset get dogPosition => _scene.dogPosition;
+
+  /// 1 = facing right, -1 = facing left; values between are mid-turn.
+  double get facing => _scene.facing;
+  DogPose get pose => _scene.pose;
+
+  /// The activity currently running, if any.
+  DogActivity? get activeActivity => _activity;
+
+  /// The most recent activity that played through to the end.
+  DogActivity? get lastCompletedActivity => _lastCompleted;
+
+  /// How much foam is in the bathtub (bath scene prop).
+  double get tubFoam => _scene.value(SceneKeys.tubFoam);
+
+  /// How far the kitchen treat cabinet is open (0 = closed).
+  double get cabinetOpen => _scene.value(SceneKeys.cabinetOpen);
+
+  /// Animated furniture and characters of the current scene, by key.
+  double sceneValue(String key) => _scene.value(key);
+
+  /// Seconds of game time, for ambient loops (blinking, fuming).
+  double get sceneTime => _scene.time;
+
+  /// Whether the dog is out of sight (hiding in the wardrobe).
+  bool get dogHidden => _scene.value(SceneKeys.dogHidden) > 0;
+
+  List<SpawnedObject> get objects => UnmodifiableListView(_scene.objects);
+  List<SceneEffect> get effects => UnmodifiableListView(_scene.effects);
+
+  SpawnedObject? objectOf(ObjectKind kind) {
+    for (final o in _scene.objects) {
+      if (o.kind == kind) return o;
+    }
+    return null;
+  }
+
+  SpawnedObject? get bowl => objectOf(ObjectKind.bowl);
+  SpawnedObject? get ball => objectOf(ObjectKind.ball);
+
+  DogFrame get dogFrame => dogFrameFor(
+    pose: _scene.pose,
+    time: _scene.time,
+    poseTime: _scene.poseTime,
+    walkPhase: _scene.walkPhase,
+    gaze: _scene.gaze,
+    gazeY: _scene.gazeY,
+    swipe: _scene.swipe,
+    lift: _scene.lift,
+    mark: _scene.mark,
+    carry: _scene.carry,
+  ).withReaction(_scene.reaction);
+
+  bool get wanderEnabled => _wanderEnabled;
+  set wanderEnabled(bool value) {
+    _wanderEnabled = value;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public requests
+  // ---------------------------------------------------------------------------
+
+  /// Starts [activity] if the game is idle and the activity belongs to the
+  /// current location; otherwise the request is ignored.
+  void startActivity(DogActivity activity) {
+    if (!locationConfig.activities.any((d) => d.activity == activity)) return;
+    final script = ActivityScripts.of(activity);
+    if (_begin(script.firstPhase, () => _runner.run(script.body))) _activity = activity;
+  }
+
+  void feed() => startActivity(DogActivity.feed);
+
+  void play() => startActivity(DogActivity.fetch);
+
+  /// Fades to [target]. Ignored while any activity is running.
+  void goTo(GameLocation target) {
+    if (target == location) return;
+    _begin(DogGameState.changingLocation, () async {
+      if (!await _runner.animate(sec(GameTimings.sceneFadeOut), (t) => _sceneOpacity.value = 1 - t)) {
+        return false;
+      }
+      _location.value = target;
+      _scene
+        ..dogPosition = locationConfig.startPosition
+        ..facing = 1
+        ..setPose(DogPose.idle);
+      return _runner.animate(sec(GameTimings.sceneFadeIn), (t) => _sceneOpacity.value = t);
+    });
+  }
+
+  /// The player tapped, dragged or held during an activity that asks for it.
+  void sendInput(PlayerInputKind kind) => _runner.sendInput(kind);
+
+  /// Freezes the game clock (app backgrounded) or resumes it.
+  void setPaused(bool paused) {
+    if (_disposed || paused == _paused) return;
+    _paused = paused;
+    if (paused) {
+      _ticker.stop();
+    } else {
+      _lastElapsed = Duration.zero;
+      _checkClock();
+      _ticker.start();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sequencing
+  // ---------------------------------------------------------------------------
+
+  /// Returns false when the request was ignored.
+  bool _begin(DogGameState first, Future<bool> Function() body) {
+    if (_disposed || isBusy) return false;
+    final s = _runner.restart();
+    _clearTransient();
+    _setState(first);
+    unawaited(_play(s, body));
+    return true;
+  }
+
+  Future<void> _play(int s, Future<bool> Function() body) async {
+    var finished = false;
+    try {
+      finished = await body();
+    } catch (error, stack) {
+      _runner.report(error, stack);
+    } finally {
+      if (_runner.isCurrent(s)) {
+        // Always leave a clean scene; if something failed mid-way, put the
+        // dog back on safe ground so it can never be stranded (e.g. in a tree).
+        _clearTransient();
+        if (!finished) _scene.dogPosition = locationConfig.startPosition;
+        final completed = finished ? _activity : null;
+        if (completed != null) _lastCompleted = completed;
+        _activity = null;
+        _setState(DogGameState.idle);
+        if (completed != null) onCompleted?.call(completed);
+      }
+    }
+    if (!_runner.isCurrent(s)) return;
+    _wanderIndex = 0;
+    await _wander(s);
+  }
+
+  /// Plays the idle routine until a newer session replaces [s].
+  Future<void> _wander(int s) async {
+    while (_runner.isCurrent(s)) {
+      final routine = locationConfig.wanderRoutine;
+      final step = routine[_wanderIndex % routine.length];
+      _wanderIndex = (_wanderIndex + 1) % routine.length;
+      final ScriptStep script = switch (step.action) {
+        WanderAction.pause => Wait(step.seconds),
+        WanderAction.habit => Sequence([_habit(_persona.idleHabit), const Pose(DogPose.idle)]),
+        WanderAction.sniff => Sequence([Pose(DogPose.sniff, step.seconds), const Pose(DogPose.idle)]),
+        WanderAction.walk => _wanderEnabled ? WalkTo(step.target!) : const Wait(1.5),
+      };
+      if (!await _runner.run(script)) return;
+    }
+  }
+
+  /// The dog's own little idle habit, from his persona.
+  static ScriptStep _habit(IdleHabit habit) => switch (habit) {
+    IdleHabit.sniff => const Pose(DogPose.sniff, 1.6),
+    IdleHabit.pantAndBlink => const Pose(DogPose.pant, 2.2),
+    IdleHabit.chinOnPaws => const Pose(DogPose.lieDown, 2.6),
+    IdleHabit.hideAndPeek => const Sequence([Pose(DogPose.crouch, 1.2), Pose(DogPose.lookUp, 1.0)]),
+    IdleHabit.zoomies => Sequence([
+      const Pose(DogPose.playBow, 0.5),
+      Pose(DogPose.rollOver, sec(GameTimings.rollOver)),
+    ]),
+    IdleHabit.softWoof => Pose(DogPose.bark, sec(GameTimings.bark)),
+    IdleHabit.scratchEar => Pose(DogPose.scratchEar, sec(GameTimings.scratchEar)),
+  };
+
+  // ---------------------------------------------------------------------------
+  // Clock
+  // ---------------------------------------------------------------------------
+
+  void _onTick(Duration elapsed) {
+    final dt = math.min(
+      (elapsed - _lastElapsed).inMicroseconds / Duration.microsecondsPerSecond,
+      GameTimings.maxFrameStep,
+    );
+    _lastElapsed = elapsed;
+    if (dt <= 0) return;
+    _scene.advance(dt, GameTimings.stepRate);
+    _runner.tick(dt);
+    _sinceClockCheck += dt;
+    if (_sinceClockCheck >= 5) _checkClock();
+    notifyListeners();
+  }
+
+  /// Follows the device clock into the next part of the day.
+  void _checkClock() {
+    _sinceClockCheck = 0;
+    if (!_disposed) _dayPhase.value = DayPhase.at(_clock());
+  }
+
+  void _clearTransient() {
+    _scene.clearTransient();
+    if (!_disposed) _sceneOpacity.value = 1;
+  }
+
+  void _setState(DogGameState value) {
+    if (!_disposed) _state.value = value;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _runner.dispose();
+    _ticker.dispose();
+    _state.dispose();
+    _location.dispose();
+    _sceneOpacity.dispose();
+    _dayPhase.dispose();
+    super.dispose();
+  }
+}
