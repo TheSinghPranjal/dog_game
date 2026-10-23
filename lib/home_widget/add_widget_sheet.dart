@@ -54,11 +54,11 @@ class _AddWidgetSheetState extends State<AddWidgetSheet> {
         ? const [
             'Touch and hold an empty spot on your Home Screen until the apps jiggle.',
             'Tap Edit, then Add Widget.',
-            'Search for "My Pet Dog", pick a size and tap Add Widget.',
+            'Search for "Doodle Pup", pick a size and tap Add Widget.',
           ]
         : const [
             'Touch and hold an empty spot on your home screen.',
-            'Tap Widgets and find My Pet Dog.',
+            'Tap Widgets and find Doodle Pup.',
             'Drag the size you like onto your home screen.',
           ];
     return Dialog(
@@ -76,7 +76,7 @@ class _AddWidgetSheetState extends State<AddWidgetSheet> {
             Text('Keep your puppy close!', style: ink.copyWith(fontSize: 22, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             const Text(
-              'Add the My Pet Dog widget to your home screen for one-tap play.',
+              'Add the Doodle Pup widget to your home screen for one-tap play.',
               style: TextStyle(color: SketchColors.pencil, fontSize: 15, height: 1.3),
             ),
             const SizedBox(height: 12),

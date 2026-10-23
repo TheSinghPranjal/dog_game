@@ -1,11 +1,11 @@
 {
-    "name": "dog_game",
-    "short_name": "dog_game",
+    "name": "Doodle Pup",
+    "short_name": "Doodle Pup",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A hand-drawn notebook puppy to feed, wash and play with.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -21,8 +21,8 @@ abstract final class UnlockThresholds {
     DogId.biscuit: UnlockRule.always,
     DogId.luna: UnlockRule.always,
     DogId.pepper: UnlockRule.always,
-    DogId.snowball: UnlockRule(10),
-    DogId.ziggy: UnlockRule(12),
+    DogId.snowball: UnlockRule.always,
+    DogId.ziggy: UnlockRule.always,
   };
 
   static const environments = <EnvironmentId, UnlockRule>{

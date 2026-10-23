@@ -72,8 +72,8 @@ void main() {
       expect(GameSave.fromJson({'selectedDog': 'buddy'}).selectedDog, DogId.buddy);
     });
 
-    test('a locked dog is never restored as the selected one', () {
-      expect(GameSave.fromJson({'selectedDog': 'ziggy'}).selectedDog, DogId.maple);
+    test('the selected dog is restored', () {
+      expect(GameSave.fromJson({'selectedDog': 'ziggy'}).selectedDog, DogId.ziggy);
       final rich = GameSave.fromJson({
         'selectedDog': 'biscuit',
         'dogs': {

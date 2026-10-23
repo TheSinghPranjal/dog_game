@@ -210,7 +210,7 @@ private struct Title: View {
   let size: CGFloat
 
   var body: some View {
-    Text("My Pet Dog")
+    Text("Doodle Pup")
       .font(.system(size: size, weight: .heavy, design: .rounded))
       .foregroundColor(Pen.ink)
       .lineLimit(1)
@@ -260,7 +260,7 @@ struct PetWidgetView: View {
       .widgetPaperBackground()
       .widgetURL(launchURL)
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel("My Pet Dog. \(entry.greeting) Tap to play.")
+      .accessibilityLabel("Doodle Pup. \(entry.greeting) Tap to play.")
       .accessibilityAddTraits(.isButton)
   }
 
@@ -337,7 +337,7 @@ struct PetWidget: Widget {
     StaticConfiguration(kind: kind, provider: PetProvider()) { entry in
       PetWidgetView(entry: entry)
     }
-    .configurationDisplayName("My Pet Dog")
+    .configurationDisplayName("Doodle Pup")
     .description("Your puppy on your Home Screen. Tap to play.")
     .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     .paperContentMargins()

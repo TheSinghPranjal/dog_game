@@ -67,9 +67,8 @@ void main() {
     expect(dogLook.value, DogLook.lab);
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
 
-    // Snowball and Ziggy wait for friendship stars; the rest are playable.
-    expect(GameStore.instance.save.isDogUnlocked(DogId.snowball), isFalse);
-    expect(GameStore.instance.save.isDogUnlocked(DogId.ziggy), isFalse);
+    // Every dog is playable from the start.
+    expect(DogId.values.every(GameStore.instance.save.isDogUnlocked), isTrue);
 
     for (var i = 1; i < DogProfiles.all.length; i++) {
       await tester.tap(find.bySemanticsLabel('Next dog'));
@@ -80,7 +79,7 @@ void main() {
     expect(dogLook.value, DogLook.golden);
   });
 
-  testWidgets('locked dogs show as pencil silhouettes with their star count', (tester) async {
+  testWidgets('Snowball can be picked straight away', (tester) async {
     await _pumpStart(tester);
     for (var i = 0; i < 5; i++) {
       await tester.tap(find.bySemanticsLabel('Next dog'));
@@ -88,9 +87,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     }
     expect(find.textContaining('Snowball'), findsOneWidget);
-    expect(find.text('Unlock at 10 friendship stars'), findsOneWidget);
-    expect(find.byType(ColorFiltered), findsWidgets);
-    expect(selectedDog.value, DogProfiles.pepper, reason: 'a locked dog is not selected');
+    expect(find.textContaining('friendship stars'), findsNothing);
+    expect(selectedDog.value, DogProfiles.snowball);
   });
 
   test('the seven dogs, in swipe order', () {

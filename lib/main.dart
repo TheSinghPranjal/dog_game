@@ -77,7 +77,7 @@ class MyPetDogAppState extends State<MyPetDogApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'My Pet Dog',
+      title: 'Doodle Pup',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: const Color(0xFF2236B5)),
       navigatorKey: _navigatorKey,

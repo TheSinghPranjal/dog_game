@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/sketch/sketch.dart';
 
-/// "My Pet Dog" in bold ink with a coral pencil underline.
+/// "Doodle Pup" in bold ink with a coral pencil underline.
 class NotebookTitle extends StatelessWidget {
   const NotebookTitle({super.key, required this.fontSize, this.subtitle});
 
@@ -21,7 +21,7 @@ class NotebookTitle extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.only(bottom: fontSize * 0.22),
               child: Text(
-                'My Pet Dog',
+                'Doodle Pup',
                 style: TextStyle(
                   color: SketchColors.ink,
                   fontSize: fontSize,
