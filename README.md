@@ -101,8 +101,8 @@ tidiness, cuddliness).
 | Biscuit | chubby corgi, long and low, fox ears | Lazy foodie | chin on paws | Kitchen | always |
 | Luna | black-and-white husky, pale blue eyes | Quiet night dog | hide and peek | Living room | always |
 | Pepper | wire-haired terrier, beard, short tail | Mischief zoomies | zoomies | Bedroom | always |
-| Snowball | fluffy white samoyed, curled tail | Gentle cloud | soft woof | Bath | 10 stars |
-| Ziggy | dapple dachshund, one ear up | Odd little rocket | scratch an ear | Outdoors | 12 stars |
+| Snowball | fluffy white samoyed, curled tail | Gentle cloud | soft woof | Bath | always |
+| Ziggy | dapple dachshund, one ear up | Odd little rocket | scratch an ear | Outdoors | always |
 
 ## Places and activities
 
