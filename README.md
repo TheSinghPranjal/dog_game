@@ -189,3 +189,36 @@ endings and no drift. It also checks waypoints, the stool and paws-up paths,
 that he never nears the stove, climbs the tree or goes into the pond,
 location switching and locking, rejected cross-place actions,
 background/resume, a short wide screen, and disposal mid-animation.
+
+## Production deploy
+
+The Play production track is shipped by a manual workflow. In GitHub, open
+Actions → **Production Deploy** → **Run workflow**. There is no push trigger:
+the workflow commits the version bump to `main`, and a push trigger would
+start another deploy.
+
+Create these repository secrets under Settings → Secrets and variables →
+Actions. The names have to match exactly:
+
+| Secret | Purpose |
+| --- | --- |
+| `KEYSTORE_BASE64` | Base64 of the upload keystore, restored as `android/app/keystore/upload-keystore.jks` |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Upload key alias |
+| `KEY_PASSWORD` | Upload key password |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT` | JSON key for the Play Console service account |
+
+The Android application id is `com.the_lazy_bear_club.dog_game` (`applicationId`
+in `android/app/build.gradle.kts`). It has to be the same app as the Play listing.
+
+Each run adds 1 to the `+build` number in `pubspec.yaml`, commits
+`chore: bump version to <version>` on `main`, and uploads that build.
+`pubspec.yaml` is `1.0.0+1` today, so the first run ships `1.0.0+2`. Play
+rejects a version code it already has. If this listing is already at build 2
+or higher, raise the pubspec build number above that before running. When an
+upload fails because the version code is already on Play, run the workflow
+again.
+
+If Play responds with `The caller does not have permission`, the service
+account cannot release this app. In Play Console, open **Users and
+permissions** and grant that account release access to this app.
