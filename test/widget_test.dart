@@ -68,6 +68,9 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(const MyPetDogApp());
       expect(find.byType(SplashScreen), findsOneWidget);
+      expect(find.text('Doodle Pup'), findsOneWidget);
+      expect(find.text('by'), findsOneWidget);
+      expect(find.text('The Lazy Bear Club'), findsOneWidget);
       await _pumpSeconds(tester, 3);
       expect(find.byType(SplashScreen), findsNothing);
       expect(find.byType(StartScreen), findsOneWidget);
@@ -77,6 +80,39 @@ void main() {
       await openApp(tester);
       expect(find.bySemanticsLabel('Play'), findsOneWidget);
       expect(find.bySemanticsLabel('How to play'), findsOneWidget);
+    });
+
+    testWidgets('splash byline holds on a small phone, a short screen, and in dark mode', (tester) async {
+      Future<void> show(Size size, {double textScale = 1, double bottomInset = 0, ThemeData? theme}) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme ?? ThemeData.light(),
+            builder: (context, child) {
+              final media = MediaQuery.of(context);
+              return MediaQuery(
+                data: media.copyWith(
+                  textScaler: TextScaler.linear(textScale),
+                  padding: media.padding.copyWith(bottom: bottomInset, top: bottomInset > 0 ? 24 : media.padding.top),
+                ),
+                child: child!,
+              );
+            },
+            home: const SplashScreen(),
+          ),
+        );
+        expect(find.text('Doodle Pup'), findsOneWidget);
+        expect(find.text('by'), findsOneWidget);
+        expect(find.text('The Lazy Bear Club'), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(tester.takeException(), isNull);
+      }
+
+      await show(const Size(320, 568), textScale: 1.8, bottomInset: 34);
+      await show(const Size(800, 360), textScale: 1.4, bottomInset: 12);
+      await show(const Size(1024, 1366), theme: ThemeData.dark());
     });
 
     testWidgets('tapping the splash skips ahead', (tester) async {
